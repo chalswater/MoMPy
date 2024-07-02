@@ -1,4 +1,4 @@
-# MoMPy: Moment matrix generation and managing package for SDP hierarchies.
+# MoMPy: Moment matrix generation and managing package for SDP hierarchies. (still in development)
 
 This is a package to generate moment matrices for SDP hierarchies. The package contains the following relevant functions:
 
