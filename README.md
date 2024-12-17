@@ -145,129 +145,116 @@ Now all complicatd numerical work is done! Here we detail how to properly use th
 
 ### Step 1: Define and organize your SDP variables
 
-First things first: we need to define the SDP variables. In our relaxation, these are essentially the elements in the moment matrix. However, with our tool, we 
+First things first: we need to define the SDP variables. In our relaxation, these are essentially the elements in the moment matrix. However, with our tool, we do not need to define the moment matrix as a variable itself, but only the list of non-identical elements in the matrix G. This list is essentially the variable _list_of_eq_indices_ extracted from the _MomentMatrix_ function. Therefore, we define a vector of variables, call it _G_var_vec_, as follows
+```
+G_var_vec = {}
+for element in list_of_eq_indices:
+    if element == map_table[-1][-1]:
+        G_var_vec[element] = 0.0
+    else:
+        G_var_vec[element] = cp.Variable()
+```
+What we did here is define a dictionary _G_var_vec_ in which we store the SDP variables. The last element from the _list_of_eq_indices_ (i.e. the element that is equal to _map_table[-1][-1]_) contains the variables that are zero because of the orthogonality properties we specifried above. 
+
+With this vector we can construct the moment matrix _MomMat_ as follows
+```
+lis = []
+for r in range(len(G)):
+    lis += [[]]
+    for c in range(len(G)):
+        lis[r] += [[ G[r][c] ]]
+MomMat = cp.bmat(lis)
+```
+
+Now _MomMat_ is the matrix containing all the moments in our SDP relaxation, and all equivalence relations considering intrinsic properties of the operators are already accounted for.
+
+> [!NOTE]
+> To access each element one has to use the _map_table_ outputted from the Moment Matrix function, with the _fmap_ function. For example, the variable corresponding to Tr(R[x] @ M[y][b]) is accessed through
+> ```
+> G_var_vec[fmap(map_table,[R[x],M[y][b]])]
+> ```
+> And the identity element Tr(id) is recovered from choosing the element **[0]** as follows
+> ```
+> G_var_vec[fmap(map_table,[0])]
+> ```
 
 
+### Step 2: Specify all non-trivial constraints
 
+Now that we properly defined all SDP vairables, we need to add the constraints that we are missing. These can be for example normalisation constraints, certain values of traces or bounded elements which are problem-dependent. 
 
+First, define a list where we will store all constraints:
+```
+ct = []
+```
 
+#### Normalisation
 
+Let us start adding normalisation constraints. We can do it two ways: by hand or using a tool provided by the package.
 
-The main use of the MoMPy package is to build the matrices of moments and identify all equivalence relations in an autamized manner. 
+1. **Normalisation by hand**: Assume that the operator M[y][b] when summed over all "b" one recovers the identity. This implies that the following elements need to be normalised
+```
+ct += [ sum([ G_var_vec[fmap(map_table,[M[y][b]])] for b in range(nB) ]) == G_var_vec[fmap(map_table,[0])] for y in range(nY) ]
+ct += [ sum([ G_var_vec[fmap(map_table,[R[x],M[y][b]])] for b in range(nB) ]) == G_var_vec[fmap(map_table,[R[x]])] for y in range(nY) for x in range(nX) ]
+```
+and so on including all elements that intervene in the hierarchy.
 
-How does it work?
-
-It's simple. Suppose you have an optimisation problem involving traces of operators A_{a}, B_{y,b} and C_{k} as for example:
-
-maximise Tr[A_{a} * B_{y,b}] 
-s.t. Tr[C_{k} * B_{y,b}] >= c_{k,y,b}
-
-
-
-1) Define a set of lists of scalar numbers. Each different scalar represents a different operator. to keep track of each operator easily, we suggest to use the following notations:
-
- - List of operators:
-     
-    A = [] # Operator A
-    B = [] # Operator B
-    C = [] # Operator C
+2. **Normalisation using the package**: The package offers a function that can take care of the normalisation of one operator that appears in the hierarchy. This is done by using the function _normalisation_contraints_. To sue this tool, we suggest to use this method
+```
+for y in range(nY):
+    map_table_copy = map_table[:]
     
- - List where we will store the operators:
+    identities = [ term[0] for term in map_table_copy]
+    norm_cts = normalisation_contraints(M[y],identities)
     
-    S = [] # List of first order elements
-    
- - Store the operators:
- 
-    # A has indices A[a]
-    cc = 1    
-    for a in range(nA):
-        S += [cc]
-        R += [cc]
-        cc += 1
-    
-    # B has indices B[y][b]
-    for y in range(nY):
-        B += [[]]
-        for b in range(nB): 
-            S += [cc]
-            B[y] += [cc]
-            cc += 1
-            
-    # C has indices [k]
-    for k in range(nK):
-        S += [cc]
-        C += [cc]
-        cc += 1
+    for gg in range(len(norm_cts)):
+        the_elements = [fmap(map_table,norm_cts[gg][jj]) for jj in range(nB+1) ]
+        an_element_is_not_in_the_list = False
+        for hhh in range(len(the_elements)):
+            if the_elements[hhh] == 'ERROR: The value does not appear in the mapping rule':
+                an_element_is_not_in_the_list = True
+        if an_element_is_not_in_the_list == False:
+            ct += [ sum([ G_var_vec[fmap(map_table,norm_cts[gg][jj])] for jj in range(nB) ]) == G_var_vec[fmap(map_table,norm_cts[gg][nB])]  ]
+```
+It may not be the most intuitive solution, but it is effective, and takes care of the normalisation of M[y][b] that affects all elements in the hierarchy.
 
-2) Declare operational relations. These consists in the following:
+#### Exact values or bounds on certain elements
 
- - Operators are rank-1: rank_1_projectors
- - Operators are orthogonal for different specific indices: orthogonal_projectors
- - Operators commute with every other element: commuting_variables
- - Operators may not commute with some other operators (which we call states): list_states
- 
- For example, suppose all operators are rank-1, 
+Other constraints might involve idntifyig the exact value of some elements in the matrix, or at least some bounds. For example, in our example, the trace of quantum states we know must return the identity. Therefore,
+```
+ct += [ G_var_vec[fmap(map_table,[R[x]])] == 1.0 for x in range(nX)]
+```
 
-    rank_1_projectors = []#w_R
-    rank_1_projectors += [w_B[y][b] for y in range(nY) for b in range(nB)]
-    rank_1_projectors += [w_P[k] for k in range(nK)]
+Additionally, assume that we want to bound the inner product of all state preparations to be at least equal to _d_ (to be specificed). This can be implemented with
+```
+ct += [ G_var_vec[fmap(map_table,[R[x],R[xx]])] >= d for x in range(nX) for xx in range(nX) ]
+```
 
- operators B are orthogonal for indices [b] for every [y], and same for P but for incides [k]
+### Step 3: Define object function and run SDP
 
-    
-    orthogonal_projectors = []
-    orthogonal_projectors += [ w_B[y] for y in range(nY)]
-    orthogonal_projectors += [ w_P ] 
+Now we only need to define the object function. In our example, we can take the simple state discrimination success probability and only a single input _y_ in Bob's device. That is,
+```
+W = sum([ G_var_vec[fmap(map_table,[R[x],M[0][x]])] for x in range(nX) ])
+```
 
- and nothing else for now (for simplicity),
+We aim to maximise the success probability _W_. We can do this using CVXPY as follows
+```
+obj = cp.Maximize(W)
+prob = cp.Problem(obj,ct)
 
-    list_states = [] 
-    commuting_variables = [] 
-    
-    
-3) If we include 1st order elements, we write S as the first entry of the function. 
-If additionally we want to automatically include all 2nd order elements, we write S as the second entry as well. 
-If we need additional specific elements of higher order elements, we can include them in the list S_high as for example,
+try:
+    mosek_params = {
+            "MSK_DPAR_INTPNT_CO_TOL_REL_GAP": 1e-1
+        }
+    prob.solve(solver='MOSEK',verbose=False, mosek_params=mosek_params)
 
-    S_high = []
-    for a in range(nA):
-        for aa in range(nA):
-            S_high += [[A[a],A[aa]]]
-            
-    for a in range(nA):
-        for b in range(nB):
-            for y in range(nY):
-                S_high += [[A[a],B[y][b]]]
-        
-    for k in range(nK):
-        for b in range(nB):
-            for y in range(nY):
-                S_high += [[C[k],B[y][b]]]
-            
-    for a in range(nA):
-        for k in range(nK):
-              S_high += [[C[k],A[a]]]
+except SolverError:
+    something = 10
+```
 
-Here we included the specific seconnd order elements [[A,A],[A,B],[C,B],[C,A]], but we can include any other higher order elemetns if required.
+Here we are using the solver _MOSEK_ which can be freely used with an academic license. The solution of the SDP can be accessed through _W.value_.
 
-4) Call MomentMatrix inbuilt function as follows:
 
-[MoMatrix,map_table,S,list_of_eq_indices,Mexp] = MomentMatrix(S,S,S_high,rank_1_projectors,orthogonal_projectors,commuting_variables,list_states)
-    
-This function returns:
-
- - MoMatrix: matrix of scalar indices that represent different quantities within the moment matrix. To be used as indices to label SDP variables.
- - map_table: table to map from explicit operators to indices in MoMatrix. This shall be used with the inbuilt matrix: fmap(map_table,i) as
- 
-        fmap(map_table,[A[a],B[y][b]]) returns the index corresponding to the variable that represents Tr[A[a] * B[y][b]].
-        
- - S: list of first order elements that we wrote as input
- - list_of_eq_indices: complete list of unique indices that appear in MoMatrix. These are ordered from lowest to highest.
- - Mexp: Moment matrix with explicit operators as we defined them in the beginning.
- 
- 
-    
-    
     
     
     
