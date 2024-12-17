@@ -12,7 +12,7 @@ See the sections below to get more information on the functions and how to use t
 
 This package is in constant development.
 
-## Basiscs and applicable senarios for SDP relaxations
+## Basics and applicable senarios for SDP relaxations
 
 Consider a scenario of two parties. One party (Alice) encodes classical messages x={0,1,...,nX-1} in quantum states {R[x]}. These states are sent to a second party (Bob) who based on the value of a classical input y={0,1,...,nY-1} performs a measurement {M[y][b]} with outcome b={0,1,...,nB}. Alice and Bob can extract the observable correlations through the Born rule: p(b|x,y) = Tr( R[x] @ M[b][y] ). Now, Alice and Bob are given the task of obtaining the maximum of a linear function on the probabilities W = sum(c[b][x][y] * p(b|x,y) ) over all possible state preparations and measurements. To render this optimisation as a semidefinite program (SDP), a relaxation is required. That is, from the list of relevant operators O = {id, R[x], M[y][b]} sample monomials L = {id, R[x], M[y][b], R[x] @ R[xx], R[x] @ M[y][b], M[y][b] @ M[yy][bb], ... } up to a certain order. With those monomials, one then builds a matrix G = Tr(u @ v), for u and v being all monomials in L. Then, since by construction G is positive-semidefinite, and W will appear in the elements of G, one can optimise W given that G is positive semidefinite and get a good approximate solution to the problem.
 
@@ -21,7 +21,7 @@ The problem in building such SDP relaxations lies in building the moment matrix 
 > [!NOTE]
 > The package is applicable to any optimisation problem that can be rendered as a SDP relaxation with full traces.
 
-## Use the package
+## Use of the package: build your first moment matrix!
 
 Here we detial the first steps towards th propper use of the package.
 
@@ -136,9 +136,16 @@ The function returns a list of outputs. These are:
 
 From this big list of outputs, we will mainly only use the two most important ones: the Moment Matrix **G** and the table **map_table** to access all elements in the Moment Matrix.
 
+## Use the moment matrix to build SDP hierarchies
 
+Now all complicatd numerical work is done! Here we detail how to properly use the moment matrix to build the SDP relaxation. We will take the example above to illustrate the steps.
 
+> [!NOTE]
+> To build a semidefinite program, we use the package CVXPY which can be freely downloaded from using pip.
 
+### Step 1: Define and organize your SDP variables
+
+First things first: we need to define the SDP variables. In our relaxation, these are essentially the elements in the moment matrix. However, with our tool, we 
 
 
 
