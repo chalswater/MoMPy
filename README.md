@@ -94,7 +94,7 @@ Now in S we have all elements up to first order and in S_high all elements in se
 
 ### Write all operational properties of the operators
 
-The next step is to identify and write down which properties the operators will have to obey when building the moment matrix. The package can incorporate teh following properties:
+The next step is to identify and write down which properties the operators will have to obey when building the moment matrix. The package can incorporate the following properties:
 
 1. **Rank-1 projectors**: If an operator R is rank-1, that is if R@R = R.
 ```
@@ -141,7 +141,7 @@ From this big list of outputs, we will mainly only use the two most important on
 Now all complicatd numerical work is done! Here we detail how to properly use the moment matrix to build the SDP relaxation. We will take the example above to illustrate the steps.
 
 > [!NOTE]
-> To build a semidefinite program, we use the package CVXPY which can be freely downloaded from using pip.
+> To build a semidefinite program, we use the package CVXPY which can be freely downloaded from pip.
 
 ### Step 1: Define and organize your SDP variables
 
