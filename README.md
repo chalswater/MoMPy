@@ -12,32 +12,32 @@ See the sections below to get more information on the functions and how to use t
 
 This package is in constant development.
 
-## Basics and applicable senarios for SDP relaxations
+## Basics and applicable scenarios for SDP relaxations
 
 Consider a scenario of two parties. One party (Alice) encodes classical messages x={0,1,...,nX-1} in quantum states {R[x]}. These states are sent to a second party (Bob) who based on the value of a classical input y={0,1,...,nY-1} performs a measurement {M[y][b]} with outcome b={0,1,...,nB}. Alice and Bob can extract the observable correlations through the Born rule: p(b|x,y) = Tr( R[x] @ M[b][y] ). Now, Alice and Bob are given the task of obtaining the maximum of a linear function on the probabilities W = sum(c[b][x][y] * p(b|x,y) ) over all possible state preparations and measurements. To render this optimisation as a semidefinite program (SDP), a relaxation is required. That is, from the list of relevant operators O = {id, R[x], M[y][b]} sample monomials L = {id, R[x], M[y][b], R[x] @ R[xx], R[x] @ M[y][b], M[y][b] @ M[yy][bb], ... } up to a certain order. With those monomials, one then builds a matrix G = Tr(u @ v), for u and v being all monomials in L. Then, since by construction G is positive-semidefinite, and W will appear in the elements of G, one can optimise W given that G is positive semidefinite and get a good approximate solution to the problem.
 
-The problem in building such SDP relaxations lies in building the moment matrix G and identify all elements that are equivalent by intrinsic properties of the operators. For instance, if R[x] are pure states, then the elements in G Tr(R[x]) and Tr(R[x]@R[x]) are equivalent. This package takes care of this burden for you. Specifically, you can specify properties of the relevant operators such as rank-1, orthogonality, commutativity, ... and the package give you the SDP moment matrix. 
+The problem in building such SDP relaxations lies in building the moment matrix G and identify all elements that are equivalent by intrinsic properties of the operators. For instance, if R[x] are pure states, then the elements in G Tr(R[x]) and Tr(R[x]@R[x]) are equivalent. This package takes care of this burden for you. Specifically, you can specify properties of the relevant operators such as rank-1, orthogonality, commutativity, ... and the package gives you the SDP moment matrix. 
 
 > [!NOTE]
 > The package is applicable to any optimisation problem that can be rendered as a SDP relaxation with full traces.
 
 ## Use of the package: build your first moment matrix!
 
-Here we detial the first steps towards th propper use of the package.
+Here we detail the first steps towards the proper use of the package.
 
 ### Installation
 
-To install teh package you only need to download and install it from PyPi using pip. Just write the following command in your terminal:
+To install the package you only need to download and install it from PyPi using pip. Just write the following command in your terminal:
 
 ```
 pip install MoMPy
 ```
 
-Once the pacakge is installed, you are rready to use it.
+Once the package is installed, you are ready to use it.
 
 ### Identify the list of relevant operators and sample monomials
 
-The first step to build the SDP hierarchy is to identify and list the relevant operators in your scenario. To illustrate how can you simply do that in python, let's take an example. Consdier the prepare-and-measure scenario from the beginning: Alice prepares quantum states R[x] and Bob performs measurements M[y][b]. These will be our relevant operators. 
+The first step to build the SDP hierarchy is to identify and list the relevant operators in your scenario. To illustrate how can you simply do that in python, let's take an example. Consider the prepare-and-measure scenario from the beginning: Alice prepares quantum states R[x] and Bob performs measurements M[y][b]. These will be our relevant operators. 
 
 > [!IMPORTANT]
 > The identity also belongs to the list of relevant operators. However, we do not need to take care of since the package will automatically incorporate it.
