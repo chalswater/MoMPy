@@ -104,20 +104,16 @@ rank_1 = []
 ```
 orthogonal_projectors = []
 ```
-3. **Commuting operators**: If the operator R commutes with any other operator in the list.
+3. **Commuting pairs**: If the operator R commutes with any other operator R' in the list.
 ```
-commuting_operators = []
+commuting_pairs = []
 ```
-4. **Exceptions for cummutativity**: If the operators R listed to commute with any other operators do not commute with an operator in the list.
-```
-exceptions_comm = []
-```
-In our exxample, consider that R and M are rank-1, M are orthogonal projectors for each distinct input y, and R commute with everything. This can be described with:
+In our exxample, consider that R and M are rank-1, M are orthogonal projectors for each distinct input y, and R commute. This can be described with:
 ```
 rank_1 += [R[x] for x in range(nX)]
 rank_1 += [M[y][b] for y in range(nY) for b in range(nB)]
 orthogonal_projectors += [ M[y] for y in range(nY) ]
-commuting_operators += [R[x] for x in range(nX)]
+commuting_pairs += [ [ [ w_R[x] for x in range(nX) ] , [ w_R[x] for x in range(nX) ] ] ]
 ```
 
 ### Call the pacakge to create the SDP moment matrix
@@ -125,7 +121,7 @@ commuting_operators += [R[x] for x in range(nX)]
 Now we have all ingredients to build the moment matrix for our SDP relaxation. To do so, we will import first the necessary tools to build moment matrices. These are found within the _MOM_ part of the package. Then, one calls the function _MomentMatrix_ as follows:
 ```
 from MoMPy.MoM import *
-[G,map_table,S_out,list_of_eq_indices,Gexp] = MomentMatrix(S,[],S_high,rank_1,orthogonal_projectors,commuting_operators,exceptions_comm)
+[G,map_table,S_out,list_of_eq_indices,Gexp] = MomentMatrix(S,[],S_high,rank_1,orthogonal_projectors,commuting_pairs)
 ```
 The function returns a list of outputs. These are:
 1. **G**: Moment matrix with indices. Each index represents an SDP variable.
@@ -253,6 +249,8 @@ except SolverError:
 ```
 
 Here we are using the solver _MOSEK_ which can be freely used with an academic license. The solution of the SDP can be accessed through _W.value_.
+
+For other example cases, see the other files in this repository. For any question, please contact me through e-mail: chalswater@gmail.com.
 
 
     
