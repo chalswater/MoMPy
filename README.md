@@ -1,264 +1,423 @@
-# MoMPy: Moment matrix generation and managing package for SDP hierarchies.
+# MoMPy
 
-## Introduction
+**Moment matrices for SDP hierarchy relaxations.**
 
-This is a package available in Python to generate moment matrices for SDP hierarchies. The package is built to be intuitive and easy to use. It contains only two relevant functions:
+MoMPy builds the moment matrix of a semidefinite relaxation and works out, for
+you, which of its entries are forced to be equal or zero by the algebraic
+properties of your operators — rank-1 projectors, orthogonal measurements,
+commutation. You describe the operators; MoMPy hands back a matrix of SDP
+variable indices ready to drop into CVXPY.
 
- - **MomentMatrix:** generates the moment matrix with operational equivalences already taken into account (except normalisation).
+```python
+from MoMPy import OperatorSet, MomentProblem
 
- - **normalisation_contraints:** takes into account normalisation constraints. This is to be called inside the SDP and added as a constraint!
+ops = OperatorSet()
+R = ops.add_family(3, idempotent=True)     # three pure states
+M = ops.add_povm_family(2, 2)              # M[y][b]: two binary measurements
+ops.declare_commuting(R, R)                # the states commute with each other
 
-See the sections below to get more information on the functions and how to use the package.
+monomials  = list(R) + [m for row in M for m in row]
+monomials += [[R[x], M[y][b]] for x in range(3) for y in range(2) for b in range(2)]
 
-This package is in constant development.
-
-## Basics and applicable scenarios for SDP relaxations
-
-Consider a scenario of two parties. One party (Alice) encodes classical messages x={0,1,...,nX-1} in quantum states {R[x]}. These states are sent to a second party (Bob) who based on the value of a classical input y={0,1,...,nY-1} performs a measurement {M[y][b]} with outcome b={0,1,...,nB}. Alice and Bob can extract the observable correlations through the Born rule: p(b|x,y) = Tr( R[x] @ M[b][y] ). Now, Alice and Bob are given the task of obtaining the maximum of a linear function on the probabilities W = sum(c[b][x][y] * p(b|x,y) ) over all possible state preparations and measurements. To render this optimisation as a semidefinite program (SDP), a relaxation is required. That is, from the list of relevant operators O = {id, R[x], M[y][b]} sample monomials L = {id, R[x], M[y][b], R[x] @ R[xx], R[x] @ M[y][b], M[y][b] @ M[yy][bb], ... } up to a certain order. With those monomials, one then builds a matrix G = Tr(u @ v), for u and v being all monomials in L. Then, since by construction G is positive-semidefinite, and W will appear in the elements of G, one can optimise W given that G is positive semidefinite and get a good approximate solution to the problem.
-
-The problem in building such SDP relaxations lies in building the moment matrix G and identify all elements that are equivalent by intrinsic properties of the operators. For instance, if R[x] are pure states, then the elements in G Tr(R[x]) and Tr(R[x]@R[x]) are equivalent. This package takes care of this burden for you. Specifically, you can specify properties of the relevant operators such as rank-1, orthogonality, commutativity, ... and the package gives you the SDP moment matrix. 
-
-> [!NOTE]
-> The package is applicable to any optimisation problem that can be rendered as a SDP relaxation with full traces.
-
-## Use of the package: build your first moment matrix!
-
-Here we detail the first steps towards the proper use of the package.
-
-### Installation
-
-To install the package you only need to download and install it from PyPi using pip. Just write the following command in your terminal:
-
-```
-pip install MoMPy
+mm = MomentProblem(monomials, ops.algebra(), dim=1).build()
+print(mm.summary())
 ```
 
-Once the package is installed, you are ready to use it.
+```
+MomentMatrix: 20 x 20 (19 monomials + identity)
+  block size (dim)   : 1
+  SDP variables      : 64
+  compression        : 400 entries -> 64 variables (6.2x)
+  zero entries       : 64
+  distinct words seen: 885
+  build time         : 0.012 s
+```
 
-### Identify the list of relevant operators and sample monomials
 
-The first step to build the SDP hierarchy is to identify and list the relevant operators in your scenario. To illustrate how can you simply do that in python, let's take an example. Consider the prepare-and-measure scenario from the beginning: Alice prepares quantum states R[x] and Bob performs measurements M[y][b]. These will be our relevant operators. 
+> ### `cyclicity`: tracial or state moments? Read this before your first build.
+>
+> `MomentProblem(..., cyclicity=True)` (the default) uses **tracial** moments
+> `Tr(u v†)`, which are cyclic. `cyclicity=False` uses **state** moments
+> `<psi|u v†|psi>`, which are not.
+>
+> Cyclicity is valid when your figure of merit really is a trace with the state
+> *inside* the algebra — prepare-and-measure scenarios, `Tr(rho_x M_b)`. It is
+> **not** valid for Bell/NPA problems. Imposing it there over-constrains the
+> program: CHSH at level 1+AB returns 2.0000 instead of Tsirelson's 2.8284, so
+> it is not an upper bound on the quantum value at all. At level 1 both agree,
+> which makes the error easy to miss.
+>
+> | Problem | Use |
+> |---|---|
+> | Bell, NPA, device-independent | `cyclicity=False` |
+> | Prepare-and-measure, dimension witnesses | `cyclicity=True` (the default) |
+> | Unsure | `cyclicity=False` (fewer relations, so never invalid) |
 
-> [!IMPORTANT]
-> The identity also belongs to the list of relevant operators. However, we do not need to take care of since the package will automatically incorporate it.
+---
 
-To list them we do the following:
+## Contents
 
-1. Define empty lists to store the operators
-```
-R = []
-M = []
-```
-2. Create a list to store all sampled monomials from the list of operators
-```
-S = []
-```
-3. Define an ancilla variable that will count all elements we will go through
-```
-cc = 1
-```
-4. Sample all operators in the list S
-```
-for x in range(nX):
-    S += [cc]
-    R += [cc]
-    cc += 1
+- [Installation](#installation)
+- [What problem this solves](#what-problem-this-solves)
+- [Tutorial: a prepare-and-measure scenario](#tutorial-a-prepare-and-measure-scenario)
+- [Building the SDP](#building-the-sdp)
+- [Block moment matrices](#block-moment-matrices)
+- [API reference](#api-reference)
+- [Performance](#performance)
+- [Upgrading from 1.x](#upgrading-from-1x)
 
+---
+
+## Installation
+
+```bash
+pip install MoMPy            # core, needs only numpy
+pip install MoMPy[cvxpy]     # plus the CVXPY helpers
+```
+
+From a checkout:
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+---
+
+## What problem this solves
+
+Take a prepare-and-measure scenario. Alice encodes a message `x` in a quantum
+state `R[x]` and sends it to Bob, who measures with `M[y][b]` and observes `b`.
+The observable statistics are `p(b|x,y) = Tr(R[x] @ M[y][b])`, and you want to
+maximise some linear functional of them over *all* states and measurements.
+
+That optimisation is not an SDP. The standard relaxation makes it one: list
+monomials in your operators, `L = {1, R[x], M[y][b], R[x] R[x'], R[x] M[y][b], ...}`,
+and form the matrix `G[u,v] = Tr(u v†)` over `u, v ∈ L`. `G` is positive
+semidefinite by construction and your objective lives inside it, so maximising
+over PSD `G` gives an upper bound.
+
+The tedious part is that many entries of `G` are secretly the same variable.
+If `R[x]` is a pure state then `Tr(R[x])` and `Tr(R[x] R[x])` are equal. If
+`M[y][b]` is a projective measurement then `Tr(R[x] M[y][0] M[y][1])` is
+identically zero. Miss these identifications and your relaxation is looser than
+it should be; get them wrong and it is not a valid bound at all.
+
+MoMPy finds them. You declare the properties, it computes the equivalence
+classes and returns the matrix.
+
+**Applicable to** any optimisation expressible as an SDP relaxation over traces
+of operator monomials: NPA / device-independent bounds, prepare-and-measure
+scenarios, dimension witnesses, randomness certification, joint measurability.
+
+---
+
+## Tutorial: a prepare-and-measure scenario
+
+### 1. Allocate operators
+
+Operators are integer labels. `OperatorSet` allocates them and remembers their
+properties, so you never keep a counter by hand. **Label `0` is reserved for
+the identity** and is added to the matrix automatically.
+
+```python
+from MoMPy import OperatorSet
+
+nX, nY, nB = 3, 2, 2
+
+ops = OperatorSet()
+R = ops.add_family(nX, idempotent=True)     # R[x],   pure states
+M = ops.add_povm_family(nY, nB)             # M[y][b], projective measurements
+```
+
+`add_povm_family` registers each measurement's outcomes as an orthogonal set
+*and* as projectors, which is the usual projective assumption. Override with
+`add_povm(n, idempotent=False, orthogonal=False)` if you need something else.
+
+### 2. Declare the relations
+
+Three kinds of relation are supported:
+
+| Relation | Meaning | How to declare |
+|---|---|---|
+| **Idempotent** | `P @ P == P` | `add_family(..., idempotent=True)` or `ops.declare_idempotent([...])` |
+| **Orthogonal** | `P_i @ P_j == 0` for `i != j` | `add_povm(...)` or `ops.declare_orthogonal([...])` |
+| **Commuting** | `a @ b == b @ a` | `ops.declare_commuting(A, B)` |
+
+```python
+ops.declare_commuting(R, R)                 # every R[x] commutes with every R[x']
+```
+
+`declare_commuting(A, B)` means *every* label in `A` commutes with *every* label
+in `B`. Pass the same list twice for "all of these commute with each other".
+
+### 3. Choose your monomials
+
+The hierarchy level is just which monomials you include. Longer words give a
+tighter bound and a bigger matrix.
+
+```python
+monomials  = list(R)                                      # first order
+monomials += [m for row in M for m in row]
+monomials += [[R[x], M[y][b]]                             # second order
+              for x in range(nX) for y in range(nY) for b in range(nB)]
+monomials += [[R[x], R[xx], R[xxx]]                       # some third order
+              for x in range(nX) for xx in range(nX) for xxx in range(nX)]
+```
+
+A monomial is a bare label or a list of labels read left to right as a product.
+For the standard "all words up to length k" there is a shortcut:
+
+```python
+from MoMPy import generate_monomials
+monomials = generate_monomials(list(R) + flat_M, level=2)
+```
+
+### 4. Build
+
+```python
+from MoMPy import MomentProblem
+
+mm = MomentProblem(monomials, ops.algebra(), dim=1).build(progress=True)
+```
+
+`dim` is the one parameter with no default: it is the side length of the
+block that will back each entry once you reach `to_cvxpy` (see
+[Block moment matrices](#block-moment-matrices) below). `dim=1` is the
+ordinary scalar moment matrix used throughout this tutorial section.
+
+`mm.matrix` is an integer NumPy array: `mm.matrix[r, c]` is the index of the SDP
+variable at that position. Equal indices mean the same variable.
+
+Look up the variable for any monomial:
+
+```python
+mm.index_of([R[0], M[1][0]])     # the variable holding Tr(R0 M10)
+mm.identity_index                # the variable holding Tr(1)
+mm.zero_index                    # the class of monomials forced to zero
+mm.equivalents([R[0]])           # every monomial equal to Tr(R0)
+```
+
+---
+
+## Building the SDP
+
+### With the CVXPY helper
+
+```python
+model = mm.to_cvxpy()
+ct = list(model.constraints)          # G >> 0, and zeros pinned to zero
+```
+
+Index the model by monomial or by variable index:
+
+```python
+model[[R[0], M[1][0]]]     # scalar expression for Tr(R0 M10)
+model.identity             # Tr(1)
+```
+
+> **`Tr(1)` is the dimension, not 1.** In a tracial relaxation the identity
+> variable equals the Hilbert-space dimension. MoMPy deliberately does *not*
+> constrain it. Add `ct.append(model.identity == 1)` only if you are using the
+> state-vector NPA convention where moments are `<psi| w |psi>`.
+
+### Normalisation constraints
+
+`sum_b M[y][b] == 1` is a linear relation between variables, so it must be added
+to the program. MoMPy finds every place it applies:
+
+```python
 for y in range(nY):
-    M += [[]]
-    for b in range(nB):
-        S += [cc]
-        M[y] += [cc]
-        cc += 1
-```
-Up to now, we have stored in the list S all elements of first order in our hierarchy. Now we can include higher order monomials to the list. To do so, we will add them in a new list as follows:
-```
-S_high = []
-
-for x in range(nX):
-    for xx in range(nX):
-        S_high += [[R[x],R[xx]]]
-
-for y in range(nY):
-    for b in range(nB):
-        for x in range(nX):
-            S_high += [[R[x],M[y][b]]]
-
-for y in range(nY):
-    for b in range(nB):
-        for yy in range(nY):
-            for bb in range(nB):
-                S_high += [[M[y][b],M[yy][bb]]]
-```
-Now in S we have all elements up to first order and in S_high all elements in second order. We could add higher order elements if interested. For this case, we will stay in this level of the hierarchy.
-
-### Write all operational properties of the operators
-
-The next step is to identify and write down which properties the operators will have to obey when building the moment matrix. The package can incorporate the following properties:
-
-1. **Rank-1 projectors**: If an operator R is rank-1, that is if R@R = R.
-```
-rank_1 = []
-```
-2. **Orthogonal projetors**: If the operators are orthogonal projectors, that is if R[x]@R[xx] = R[x] if x == xx or = 0 if x != xx.
-```
-orthogonal_projectors = []
-```
-3. **Commuting pairs**: If the operator R commutes with any other operator R' in the list.
-```
-commuting_pairs = []
-```
-In our exxample, consider that R and M are rank-1, M are orthogonal projectors for each distinct input y, and R commute. This can be described with:
-```
-rank_1 += [R[x] for x in range(nX)]
-rank_1 += [M[y][b] for y in range(nY) for b in range(nB)]
-orthogonal_projectors += [ M[y] for y in range(nY) ]
-commuting_pairs += [ [ [ w_R[x] for x in range(nX) ] , [ w_R[x] for x in range(nX) ] ] ]
+    ct += model.apply(mm.normalisation_constraints(M[y]))
 ```
 
-### Call the pacakge to create the SDP moment matrix
+For joint measurability, where a parent POVM marginalises onto a single
+operator:
 
-Now we have all ingredients to build the moment matrix for our SDP relaxation. To do so, we will import first the necessary tools to build moment matrices. These are found within the _MOM_ part of the package. Then, one calls the function _MomentMatrix_ as follows:
-```
-from MoMPy.MoM import *
-[G,map_table,S_out,list_of_eq_indices,Gexp] = MomentMatrix(S,[],S_high,rank_1,orthogonal_projectors,commuting_pairs)
-```
-The function returns a list of outputs. These are:
-1. **G**: Moment matrix with indices. Each index represents an SDP variable.
-2. **map_table**: Table used to map lists of operators to SDP variable indices. It takes into account all equivalence relations.
-3. **S_out**: Complete list of all monomials in our scenario.
-4. **list_of_eq_indices**: This that contains lists with all monomials that are equivalent given the properties we indicated.
-5. **Gexp**: The moment matrix, but in each element one finds a list of monomials that are building each variable.
-
-From this big list of outputs, we will mainly only use the two most important ones: the Moment Matrix **G** and the table **map_table** to access all elements in the Moment Matrix.
-
-## Use the moment matrix to build SDP hierarchies
-
-Now all complicatd numerical work is done! Here we detail how to properly use the moment matrix to build the SDP relaxation. We will take the example above to illustrate the steps.
-
-> [!NOTE]
-> To build a semidefinite program, we use the package CVXPY which can be freely downloaded from pip.
-
-### Step 1: Define and organize your SDP variables
-
-First things first: we need to define the SDP variables. In our relaxation, these are essentially the elements in the moment matrix. However, with our tool, we do not need to define the moment matrix as a variable itself, but only the list of non-identical elements in the matrix G. This list is essentially the variable _list_of_eq_indices_ extracted from the _MomentMatrix_ function. Therefore, we define a vector of variables, call it _G_var_vec_, as follows
-```
-G_var_vec = {}
-for element in list_of_eq_indices:
-    if element == map_table[-1][-1]:
-        G_var_vec[element] = 0.0
-    else:
-        G_var_vec[element] = cp.Variable()
-```
-What we did here is define a dictionary _G_var_vec_ in which we store the SDP variables. The last element from the _list_of_eq_indices_ (i.e. the element that is equal to _map_table[-1][-1]_) contains the variables that are zero because of the orthogonality properties we specifried above. 
-
-With this vector we can construct the moment matrix _MomMat_ as follows
-```
-lis = []
-for r in range(len(G)):
-    lis += [[]]
-    for c in range(len(G)):
-        lis[r] += [[ G[r][c] ]]
-MomMat = cp.bmat(lis)
+```python
+ct += model.apply(mm.marginal_constraints(joint=B_labels, marginal=M[0][0]))
 ```
 
-Now _MomMat_ is the matrix containing all the moments in our SDP relaxation, and all equivalence relations considering intrinsic properties of the operators are already accounted for.
+### Problem-specific constraints
 
-> [!NOTE]
-> To access each element one has to use the _map_table_ outputted from the Moment Matrix function, with the _fmap_ function. For example, the variable corresponding to Tr(R[x] @ M[y][b]) is accessed through
-> ```
-> G_var_vec[fmap(map_table,[R[x],M[y][b]])]
-> ```
-> And the identity element Tr(id) is recovered from choosing the element **[0]** as follows
-> ```
-> G_var_vec[fmap(map_table,[0])]
-> ```
-
-
-### Step 2: Specify all non-trivial constraints
-
-Now that we properly defined all SDP vairables, we need to add the constraints that we are missing. These can be for example normalisation constraints, certain values of traces or bounded elements which are problem-dependent. 
-
-First, define a list where we will store all constraints:
-```
-ct = []
+```python
+ct += [model[[R[x]]] == 1.0 for x in range(nX)]              # states are normalised
+ct += [model[[R[x], R[xx]]] >= d for x in range(nX) for xx in range(nX)]
 ```
 
-#### Normalisation
+### Solve
 
-Let us start adding normalisation constraints. We can do it two ways: by hand or using a tool provided by the package.
+```python
+import cvxpy as cp
 
-1. **Normalisation by hand**: Assume that the operator M[y][b] when summed over all "b" one recovers the identity. This implies that the following elements need to be normalised
-```
-ct += [ sum([ G_var_vec[fmap(map_table,[M[y][b]])] for b in range(nB) ]) == G_var_vec[fmap(map_table,[0])] for y in range(nY) ]
-ct += [ sum([ G_var_vec[fmap(map_table,[R[x],M[y][b]])] for b in range(nB) ]) == G_var_vec[fmap(map_table,[R[x]])] for y in range(nY) for x in range(nX) ]
-```
-and so on including all elements that intervene in the hierarchy.
-
-2. **Normalisation using the package**: The package offers a function that can take care of the normalisation of one operator that appears in the hierarchy. This is done by using the function _normalisation_contraints_. To sue this tool, we suggest to use this method
-```
-for y in range(nY):
-    map_table_copy = map_table[:]
-    
-    identities = [ term[0] for term in map_table_copy]
-    norm_cts = normalisation_contraints(M[y],identities)
-    
-    for gg in range(len(norm_cts)):
-        the_elements = [fmap(map_table,norm_cts[gg][jj]) for jj in range(nB+1) ]
-        an_element_is_not_in_the_list = False
-        for hhh in range(len(the_elements)):
-            if the_elements[hhh] == 'ERROR: The value does not appear in the mapping rule':
-                an_element_is_not_in_the_list = True
-        if an_element_is_not_in_the_list == False:
-            ct += [ sum([ G_var_vec[fmap(map_table,norm_cts[gg][jj])] for jj in range(nB) ]) == G_var_vec[fmap(map_table,norm_cts[gg][nB])]  ]
-```
-It may not be the most intuitive solution, but it is effective, and takes care of the normalisation of M[y][b] that affects all elements in the hierarchy.
-
-#### Exact values or bounds on certain elements
-
-Other constraints might involve idntifyig the exact value of some elements in the matrix, or at least some bounds. For example, in our example, the trace of quantum states we know must return the identity. Therefore,
-```
-ct += [ G_var_vec[fmap(map_table,[R[x]])] == 1.0 for x in range(nX)]
+W = sum(model[[R[x], M[0][x]]] for x in range(nX))
+problem = cp.Problem(cp.Maximize(W), ct)
+problem.solve(solver=cp.SCS)
+print(problem.value)
 ```
 
-Additionally, assume that we want to bound the inner product of all state preparations to be at least equal to _d_ (to be specificed). This can be implemented with
-```
-ct += [ G_var_vec[fmap(map_table,[R[x],R[xx]])] >= d for x in range(nX) for xx in range(nX) ]
-```
+Any SDP solver works — SCS and Clarabel ship with CVXPY; MOSEK is free with an
+academic licence.
 
-### Step 3: Define object function and run SDP
+### Without CVXPY
 
-Now we only need to define the object function. In our example, we can take the simple state discrimination success probability and only a single input _y_ in Bob's device. That is,
-```
-W = sum([ G_var_vec[fmap(map_table,[R[x],M[0][x]])] for x in range(nX) ])
-```
+Nothing ties you to CVXPY. Allocate one variable per index and read the matrix:
 
-We aim to maximise the success probability _W_. We can do this using CVXPY as follows
-```
-obj = cp.Maximize(W)
-prob = cp.Problem(obj,ct)
-
-try:
-    mosek_params = {
-            "MSK_DPAR_INTPNT_CO_TOL_REL_GAP": 1e-1
-        }
-    prob.solve(solver='MOSEK',verbose=False, mosek_params=mosek_params)
-
-except SolverError:
-    something = 10
+```python
+variables = {i: make_variable() for i in mm.variable_indices}
+variables[mm.zero_index] = 0.0
+G = [[variables[mm.matrix[r, c]] for c in range(mm.n)] for r in range(mm.n)]
 ```
 
-Here we are using the solver _MOSEK_ which can be freely used with an academic license. The solution of the SDP can be accessed through _W.value_.
+Constraint objects expose plain integers via `.lhs` and `.rhs`, so
+`mm.normalisation_constraints(...)` is usable with any modelling layer.
 
-For other example cases, see the other files in this repository. For any question, please contact me through e-mail: chalswater@gmail.com.
+---
 
+## Block moment matrices
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+Set `dim=d` for `d > 1` and every entry of the matrix becomes a `d x d` block
+instead of a scalar — for relaxations whose "moments" are themselves
+operators on a `d`-dimensional Hilbert space, rather than numbers. Cyclicity
+practically never holds for these: `u v` and `v u` are genuinely different
+blocks, so `cyclicity=False` is the right choice for essentially every block
+hierarchy, and `hermitian=False` too whenever a block and its adjoint are
+meant to be different blocks (the general case).
+
+```python
+bm = MomentProblem(monomials, ops.algebra(), dim=d, cyclicity=False, hermitian=False).build()
+model = bm.to_cvxpy()            # dim x dim CVXPY blocks, read straight off bm.dim
+model[[R[0], M[1][0]]]           # a dim x dim expression, not a scalar
+```
+
+`to_cvxpy` is the same function used for scalar matrices above — it reads
+`matrix.dim` and builds scalars or blocks accordingly, so there is nothing
+extra to call or import for the block case. Everything else (constraints,
+`.apply()`, `.normalisation_constraints()`, indexing by monomial or by
+variable index) works exactly as in the scalar walkthrough above.
+
+---
+
+## API reference
+
+### Describing a problem
+
+| Object | Purpose |
+|---|---|
+| `OperatorSet` | Allocates labels, records properties, emits an `Algebra` |
+| `Algebra(idempotents, orthogonal_sets, commuting_pairs)` | The relations, if you prefer to build them by hand |
+| `generate_monomials(letters, level)` | All words up to a given length |
+| `MomentProblem(monomials, algebra, *, dim, cyclicity=True, hermitian=True, dedupe=True)` | One class for every relaxation: scalar or block, tracial or state |
+| `MomentProblem.from_levels(letters, level, extra=..., dim=...)` | Shortcut constructor |
+
+One class covers what used to be four: `MomentProblem(m, a, dim=1)` is the
+tracial relaxation `Tr(u v†)`; add `cyclicity=False` for state moments
+`<psi|u v†|psi>` — **use this for NPA/Bell** — and `dim=d>1` for a block
+hierarchy whose entries are `d x d` operators (see
+[Block moment matrices](#block-moment-matrices)).
+
+### `MomentProblem.build(progress=False)` → `MomentMatrix`
+
+| Attribute | Meaning |
+|---|---|
+| `.matrix` | `(n, n)` integer array of variable indices |
+| `.n`, `.shape` | Matrix size |
+| `.monomials` | Generating monomials, excluding the identity |
+| `.word_at(r, c)` | Explicit operator word behind an entry |
+| `.words` | Full nested list of words (built lazily) |
+| `.map_table` | `MapTable`: monomial → index |
+| `.variable_indices`, `.n_variables` | The distinct variables present |
+| `.zero_index`, `.identity_index` | Reserved classes |
+| `.has_zeros` | Whether orthogonality forced anything to zero |
+| `.stats` | Build diagnostics |
+| `.index_of(w)`, `.get(w, default)` | Lookup; `index_of` raises `UnknownMonomial` |
+| `.equivalents(w)` | All monomials sharing `w`'s variable |
+| `.summary()` | Human-readable report |
+| `.normalisation_constraints(povm)` | `sum(povm) == 1` constraints |
+| `.marginal_constraints(joint, marginal)` | `sum(joint) == marginal` constraints |
+| `.to_cvxpy(dim=None, psd=True, complex=None, normalise_identity=False)` | CVXPY model, scalar or block per `.dim` |
+| `.to_legacy()` | The 1.x five-tuple |
+| `.dim`, `.cyclicity`, `.hermitian` | The three flags the matrix was built with |
+
+### Options
+
+- **`dim`** — side length of the block each SDP variable becomes in
+  `to_cvxpy`. No default: declare it explicitly, even as `dim=1` for an
+  ordinary scalar matrix.
+- **`cyclicity`** — identify each word with its cyclic rotations, i.e. treat
+  an entry as a trace `Tr(u v)` rather than an operator product `u v`. Default
+  `True`. See the callout above — `False` is what NPA/Bell problems need.
+- **`hermitian`** — identify each word with its reversal. For Hermitian
+  operators this says the moment matrix is real symmetric, i.e. the variables
+  are `Re Tr(w)`. Default `True`. Set `False` to build a complex Hermitian
+  SDP, or for a block hierarchy where a block and its adjoint should be
+  independent.
+- **`dedupe`** — drop repeated monomials, which only add linearly dependent
+  rows and columns. Default `True`.
+
+---
+
+## Performance
+
+Version 2 replaces the per-monomial linear scans with canonical tuple words, a
+breadth-first closure that memoises every word it has already seen, and a
+union-find over classes. Each distinct word is expanded exactly once for the
+whole build, and monomial lookup is a dict probe rather than a scan over every
+word in every class.
+
+Measured on the scenarios in `examples/`:
+
+| Scenario | Matrix | 1.x | 2.0 | Speedup |
+|---|---|---|---|---|
+| NPA CHSH level 1 | 9×9 | 0.01 s | 0.007 s | ~1× |
+| NPA CHSH level 1+AB | 25×25 | 0.02 s | 0.012 s | 2× |
+| PAM dimension, 3rd order | 84×84 | 41.7 s | 0.041 s | **1027×** |
+| PAM dimension, 2nd+3rd order | 105×105 | 52.4 s | 0.057 s | **919×** |
+| PAM dimension, nX=4 | 137×137 | 528 s | 0.178 s | **2960×** |
+
+Scaling is now roughly linear in the number of matrix entries:
+
+| Scenario | Matrix | Entries | Variables | Time |
+|---|---|---|---|---|
+| NPA 3 settings, 3 outcomes, 1+AB | 100×100 | 10 000 | 1 370 | 0.47 s |
+| NPA 5 settings, 3 outcomes, 1+AB | 256×256 | 65 536 | 11 237 | 3.7 s |
+| PAM 6 states, order 3 | 287×287 | 82 369 | 381 | 0.86 s |
+| PAM 8 states, order 3 | 639×639 | 408 321 | 1 670 | 5.8 s |
+
+---
+
+## Correctness
+
+The equivalence classes are checked against a deliberately naive brute-force
+closure oracle over 720 randomised scenarios, covering tracial and block modes
+with and without reversal symmetry. The induced partitions match exactly.
+
+On top of that, `tests/test_physics.py` solves real SDPs (CHSH → 2√2, a fully
+commutative algebra → the local bound 2, state discrimination → 1) and plugs
+explicit matrices in for the operator labels to confirm numerically that every
+monomial sharing a variable really does have the same trace and that the zero
+class really vanishes.
+
+```bash
+pytest                     # everything
+pytest tests/test_api.py   # fast unit tests only
+```
+
+---
+
+## Upgrading from 1.x
+
+**Your existing scripts keep working.** `from MoMPy.MoM import *` still gives
+you `MomentMatrix`, `fmap`, `normalisation_contraints` and friends, returning
+the same five outputs.
+
+Two fixes do change the numbers you get, both in the direction of a tighter and
+more correct relaxation. See [`MIGRATION.md`](MIGRATION.md) for the details and
+for how to port to the new API.
+
+---
+
+## Citing and contact
+
+Author: Carles Roch i Carceller — <chalswater@gmail.com>
+Repository: <https://github.com/chalswater/MoMPy> · MIT licence.
