@@ -75,7 +75,7 @@ etc. — have not changed at all.
 
 ---
 
-# Migrating from MoMPy 1.x to 1.0
+# Migrating from MoMPy 0.x to 1.0
 
 **Short version:** your existing scripts still run. Two bug fixes change the
 numbers they produce, both making the relaxation tighter and more correct. If
@@ -111,7 +111,7 @@ instead of scanning every word in every class.
 
 **This is the important one.**
 
-1.x built the matrix by computing the lower triangle and then copying it across
+0.x built the matrix by computing the lower triangle and then copying it across
 the diagonal:
 
 ```python
@@ -141,7 +141,7 @@ wrote through `fmap` now genuinely lands on the entry you meant.
 
 ### 2.2 Equivalence classes are now fully closed
 
-1.x guarded its closure loop with
+0.x guarded its closure loop with
 
 ```python
 diff = len(commuting_pairs)   # zero when no commuting pairs were declared
@@ -155,7 +155,7 @@ also mutated `id_elements` while iterating over it, silently skipping entries.
 
 1.0 computes the true closure. Measured on the repository's own examples:
 
-| Scenario | 1.x variables | 1.0 variables |
+| Scenario | 0.x variables | 1.0 variables |
 |---|---|---|
 | NPA CHSH level 1 | 34 | 34 |
 | NPA CHSH level 1+AB | 130 | 98 |
@@ -168,7 +168,7 @@ before. They were valid upper bounds before, just looser than intended.
 
 ### 2.3 `normalisation_contraints` returns more constraints
 
-1.x hard-coded `dd = 0` and `yy = 0`, so it only inspected each class's first
+0.x hard-coded `dd = 0` and `yy = 0`, so it only inspected each class's first
 stored word and only matched the first POVM outcome. Whether a constraint was
 generated depended on which word the search happened to store first.
 
@@ -184,7 +184,7 @@ every call raised `NameError`. It is reimplemented as a table lookup returning
 
 ### 2.5 `Commute` handles repeated labels
 
-1.x removed the element *by value* (`v_copy.remove(store)`), which picked the
+0.x removed the element *by value* (`v_copy.remove(store)`), which picked the
 wrong occurrence in words containing repeated labels. Now it swaps by index.
 
 ---
@@ -241,7 +241,7 @@ mm = MomentProblem(monomials, ops.algebra()).build()
 
 ### Translation table
 
-| 1.x | 1.0 |
+| 0.x | 1.0 |
 |---|---|
 | `fmap(map_table, w)` | `mm.index_of(w)` — raises on a miss |
 | `fmap(...) == 'ERROR: ...'` | `mm.get(w) is None` |
