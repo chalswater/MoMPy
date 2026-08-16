@@ -64,7 +64,7 @@ MomentMatrix: 20 x 20 (19 monomials + identity)
 - [Block moment matrices](#block-moment-matrices)
 - [API reference](#api-reference)
 - [Performance](#performance)
-- [Upgrading from 1.x](#upgrading-from-1x)
+- [Upgrading from 0.x](#upgrading-from-1x)
 
 ---
 
@@ -336,7 +336,7 @@ hierarchy whose entries are `d x d` operators (see
 | `.normalisation_constraints(povm)` | `sum(povm) == 1` constraints |
 | `.marginal_constraints(joint, marginal)` | `sum(joint) == marginal` constraints |
 | `.to_cvxpy(dim=None, psd=True, complex=None, normalise_identity=False)` | CVXPY model, scalar or block per `.dim` |
-| `.to_legacy()` | The 1.x five-tuple |
+| `.to_legacy()` | The 0.x five-tuple |
 | `.dim`, `.cyclicity`, `.hermitian` | The three flags the matrix was built with |
 
 ### Options
@@ -367,7 +367,7 @@ word in every class.
 
 Measured on the scenarios in `examples/`:
 
-| Scenario | Matrix | 1.x | 2.0 | Speedup |
+| Scenario | Matrix | 0.x | 1.x | Speedup |
 |---|---|---|---|---|
 | NPA CHSH level 1 | 9×9 | 0.01 s | 0.007 s | ~1× |
 | NPA CHSH level 1+AB | 25×25 | 0.02 s | 0.012 s | 2× |
@@ -405,7 +405,7 @@ pytest tests/test_api.py   # fast unit tests only
 
 ---
 
-## Upgrading from 1.x
+## Upgrading from 0.x
 
 **Your existing scripts keep working.** `from MoMPy.MoM import *` still gives
 you `MomentMatrix`, `fmap`, `normalisation_contraints` and friends, returning
