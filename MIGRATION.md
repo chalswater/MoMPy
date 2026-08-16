@@ -1,4 +1,4 @@
-# Migrating from MoMPy 2.0 to 3.0
+# Migrating from MoMPy 1.0 to 1.1
 
 **Short version:** `MomentProblem`, `BlockMomentProblem`, `StateMomentProblem`
 and `NPAProblem` are now one class. `to_cvxpy` and `to_cvxpy_block` are now
@@ -7,12 +7,12 @@ those, there is nothing to do.
 
 ## 1. One class instead of four
 
-2.0 grew a class per combination of two independent flags — does the trace
+1.0 grew a class per combination of two independent flags — does the trace
 close cyclically? are words identified with their reversal? — plus a separate
 block-matrix variant on top. That is really one build procedure with two
-booleans and a size, so 3.0 collapses all four into one:
+booleans and a size, so 1.1 collapses all four into one:
 
-| 2.0 | 3.0 |
+| 1.0 | 1.1 |
 |---|---|
 | `MomentProblem(m, a)` | `MomentProblem(m, a, dim=1)` |
 | `StateMomentProblem(m, a)` / `NPAProblem(m, a)` | `MomentProblem(m, a, dim=1, cyclicity=False)` |
@@ -37,12 +37,12 @@ built it) and produces `dim x dim` CVXPY blocks automatically when
 whichever shape applies:
 
 ```python
-# 2.0
+# 1.0
 bm = BlockMomentProblem(monomials, algebra).build()
 model = to_cvxpy_block(bm, dim=2)
 model[[R[0], M[1][0]]]              # 2x2 CVXPY expression
 
-# 3.0
+# 1.1
 mm = MomentProblem(monomials, algebra, dim=2, cyclicity=False).build()
 model = mm.to_cvxpy()               # dim=2 comes from mm.dim -- or to_cvxpy(mm)
 model[[R[0], M[1][0]]]              # 2x2 CVXPY expression, same as before
@@ -68,14 +68,14 @@ is the same convexification `to_cvxpy_block` already used.
 
 Zero-pinning, `normalise_identity`, `.apply()`, and every `MomentMatrix`
 method (`.index_of`, `.normalisation_constraints`, `.to_legacy`, ...) behave
-exactly as in 2.0 for `dim=1`. `MoMPy.MoM` and `MoMPy.BloM` build the unified
+exactly as in 1.0 for `dim=1`. `MoMPy.MoM` and `MoMPy.BloM` build the unified
 `MomentProblem` internally now, but their own function signatures —
 `MomentMatrix(...)`, `BlockMatrix(...)`, `fmap`, `normalisation_contraints`,
 etc. — have not changed at all.
 
 ---
 
-# Migrating from MoMPy 1.x to 2.0
+# Migrating from MoMPy 1.x to 1.0
 
 **Short version:** your existing scripts still run. Two bug fixes change the
 numbers they produce, both making the relaxation tighter and more correct. If
@@ -132,7 +132,7 @@ different variable from the one sitting at that position in `G`.
 
 The symmetrisation is mathematically fine — it amounts to working with
 `Re Tr(w)`, and `Re Tr(w) = Re Tr(w†)`. The fix is to put the reversal into the
-equivalence relation instead of patching the matrix afterwards. 2.0 does that,
+equivalence relation instead of patching the matrix afterwards. 1.0 does that,
 so the two always agree, and there is a regression test asserting it for every
 entry.
 
@@ -153,16 +153,16 @@ so with no commuting pairs the loop never ran and multi-step reductions were
 only found when some other monomial happened to bridge them. The merging step
 also mutated `id_elements` while iterating over it, silently skipping entries.
 
-2.0 computes the true closure. Measured on the repository's own examples:
+1.0 computes the true closure. Measured on the repository's own examples:
 
-| Scenario | 1.x variables | 2.0 variables |
+| Scenario | 1.x variables | 1.0 variables |
 |---|---|---|
 | NPA CHSH level 1 | 34 | 34 |
 | NPA CHSH level 1+AB | 130 | 98 |
 | PAM dimension, 3rd order | 237 | 178 |
 | PAM dimension, nX=4 | 407 | 298 |
 
-Every difference is a *merge*: 2.0's partition is strictly coarser, never finer.
+Every difference is a *merge*: 1.0's partition is strictly coarser, never finer.
 Fewer variables means a tighter relaxation, so bounds can come out **lower** than
 before. They were valid upper bounds before, just looser than intended.
 
@@ -172,7 +172,7 @@ before. They were valid upper bounds before, just looser than intended.
 stored word and only matched the first POVM outcome. Whether a constraint was
 generated depended on which word the search happened to store first.
 
-2.0 scans every word of every class and deduplicates. You get a complete,
+1.0 scans every word of every class and deduplicates. You get a complete,
 non-redundant set. The return shape is unchanged, so the loop in the old README
 still works.
 
@@ -241,7 +241,7 @@ mm = MomentProblem(monomials, ops.algebra()).build()
 
 ### Translation table
 
-| 1.x | 2.0 |
+| 1.x | 1.0 |
 |---|---|
 | `fmap(map_table, w)` | `mm.index_of(w)` — raises on a miss |
 | `fmap(...) == 'ERROR: ...'` | `mm.get(w) is None` |
