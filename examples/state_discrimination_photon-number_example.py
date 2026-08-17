@@ -1,28 +1,21 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Aug 14 11:57:18 2026
-
-@author: carles
-"""
-
 import cvxpy as cp
 from MoMPy import MomentProblem, OperatorSet
-
-nX, nK = 3 , 1
+ 
+nX = 3
+nK = 1
 ops = OperatorSet()
 R = ops.add_family(nX, idempotent=True)   # preparations
 M = ops.add_povm(nX)                      # guessing measurement
-P = ops.add_family(nK,idempotent=True)    # the heralding projector
-ops.declare_commuting(R,R)
-
+P = ops.add_family(nK, idempotent=True)   # the photon-number projector
+ops.declare_commuting(R,R) # for classical bound (comment for quantum)
+ 
 monomials  = list(R) + list(M) + list(P)
 monomials += [[r, m] for r in R for m in M]
 monomials += [[r, p] for r in R for p in P]
 monomials += [[r, s] for r in R for s in R]
-
-mm = MomentProblem(monomials, ops.algebra()).build()
-
+ 
+mm = MomentProblem(monomials, ops.algebra(), dim=1).build()
+ 
 def bound(omega):
     model = mm.to_cvxpy()
     ct = list(model.constraints)
