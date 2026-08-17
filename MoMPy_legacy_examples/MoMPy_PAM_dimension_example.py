@@ -191,7 +191,7 @@ gamma_matrix_els = [G_new,map_table,S,list_of_eq_indices,Mexp]
 # Begin code ----------------------------------------------------------------------
 # ---------------------------------------------------------------------------------
     
-out = PAM_MoMPy(nA,nB,nX,nY,dim)
+out = PAM__dimension_MoMPy(nA,nB,nX,nY,dim)
     
 print(out)
     
