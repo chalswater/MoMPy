@@ -59,7 +59,7 @@ from .matrix import (
 from .monomials import OperatorSet, generate_monomials
 from .problem import MomentProblem
 
-__version__ = "3.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "__version__",
